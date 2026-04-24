@@ -1,5 +1,5 @@
 name: skill-browse
-version: 0.1.0
+version: 0.1.1
 description: Thin wrapper around agent-browser for fetching authenticated intranet pages from AI agents on MDM-managed devices.
 author: Renalias, Oscar
 dependencies:
