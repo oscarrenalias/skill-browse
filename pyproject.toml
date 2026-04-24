@@ -1,0 +1,24 @@
+[project]
+name = "browse"
+version = "0.0.1"
+description = "Thin wrapper around agent-browser for authenticated internal sites."
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+browse = "browse.cli:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

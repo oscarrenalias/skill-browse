@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Local browser profile + config (kept under ~/.cache and ~/.config, but
+# guard against someone pointing BROWSE_PROFILE_DIR into the repo).
+.cache/
+profile/
+
+# Secrets and captures — never commit
+*.har
+.env
+.env.local
