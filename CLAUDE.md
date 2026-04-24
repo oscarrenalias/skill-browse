@@ -1,6 +1,42 @@
 # CLAUDE.md
 
-Guidance for Claude Code sessions working **on** this codebase. If you're about to modify `src/browse/*`, read this first. How to *use* the CLI is in `SKILL.md`.
+Guidance for Claude Code sessions working **on** this repository. If you're about to modify anything under `.apm/skills/browse/src/`, read this first. How to *use* the CLI is in `.apm/skills/browse/SKILL.md`.
+
+## Repo layout
+
+This repo ships a single Claude Code skill, packaged for both `apm` install and zip distribution. The layout mirrors `oscarrenalias/skill-consulting`:
+
+```
+browse-site/
+├── apm.yml                          # APM package manifest (name, version, deps)
+├── .apm/skills/browse/              # everything that ends up in the release zip
+│   ├── SKILL.md                     # agent-facing documentation
+│   ├── pyproject.toml               # Python project metadata (deps: click)
+│   ├── uv.lock                      # pinned deps, committed for reproducibility
+│   ├── bin/browse                   # wrapper script — uses `uv run` to manage a
+│   │                                # skill-local .venv on first invocation
+│   ├── src/browse/                  # Click CLI: config, runner, authwall, cli
+│   └── tests/                       # pytest suite, no network
+├── .github/workflows/release.yml    # auto-bump patch, tag, zip, release on push
+├── README.md                        # public-facing repo readme
+└── CLAUDE.md                        # this file
+```
+
+Files at repo root (`README.md`, `CLAUDE.md`, `apm.yml`, `.github/`) are **not** shipped to end users — the release workflow zips only `.apm/skills/browse/`. Keep anything meta-to-the-skill (release automation, repo rules) at root; anything a user of the skill needs at runtime goes under `.apm/skills/browse/`.
+
+## Release flow
+
+Pushes to `main` (except README-only changes) trigger `.github/workflows/release.yml`:
+
+1. Read current version from `apm.yml`, bump patch.
+2. Commit the version bump as `github-actions[bot]` with `[skip ci]`.
+3. Tag `vX.Y.Z` and push.
+4. Zip `.apm/skills/browse/` (→ `skill-browse-X.Y.Z.zip`).
+5. Create a GitHub Release attached to that tag, with install instructions in the body.
+
+To cut a release: merge to main. Nothing else. To skip a release: include `[skip ci]` in the commit message, or push only to README.md.
+
+To pin a version manually (e.g. for a major/minor bump), edit `apm.yml` by hand and push — the workflow treats whatever's in `apm.yml` as the current version and bumps patch from there.
 
 ## What this project is
 

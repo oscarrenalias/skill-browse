@@ -4,7 +4,7 @@ A Claude Code skill that wraps [`agent-browser`](https://agent-browser.dev) so A
 
 The skill launches the system-installed Microsoft Edge (so Conditional Access / device-compliance checks pass), handles AAD's "Pick an account" interstitial automatically, and exposes a small CLI (`browse login`, `browse auth`, `browse close`) that the agent orchestrates end-to-end.
 
-See [`.apm/skills/browse/SKILL.md`](.apm/skills/browse/SKILL.md) for the full agent-facing documentation and [`.apm/skills/browse/CLAUDE.md`](.apm/skills/browse/CLAUDE.md) for developer notes.
+See [`.apm/skills/browse/SKILL.md`](.apm/skills/browse/SKILL.md) for the full agent-facing documentation and [`CLAUDE.md`](CLAUDE.md) for developer notes.
 
 Works on macOS only for now.
 
@@ -51,4 +51,4 @@ uv run --extra dev pytest -q         # 21 tests, < 1s, no network
 uv run browse --help                 # exercise the CLI locally
 ```
 
-See [`.apm/skills/browse/CLAUDE.md`](.apm/skills/browse/CLAUDE.md) for editing rules, non-negotiables, and how to extend it (new IdPs, new agent-browser subcommand wrappings).
+See [`CLAUDE.md`](CLAUDE.md) for editing rules, non-negotiables, and how to extend it (new IdPs, new agent-browser subcommand wrappings).
