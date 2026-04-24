@@ -12,6 +12,14 @@ description: Use when an AI agent needs to read or interact with authenticated i
 
 For everything else — clicking buttons, filling forms, scrolling, screenshots — use `agent-browser` directly against the same session.
 
+## Invocation
+
+The skill is self-contained — no global install. Agents invoke the wrapper at `~/.claude/skills/browse/bin/browse` (the canonical install path). The wrapper uses `uv` to manage a skill-local `.venv/` on first use, so no system-wide Python packages are touched.
+
+All examples below use the full path. If the skill is installed elsewhere, substitute the correct directory.
+
+Requires `uv` on PATH (`brew install uv` or the standalone installer from https://docs.astral.sh/uv/).
+
 ## When to trigger
 
 - "Read/fetch/summarize this internal page": any intranet URL that requires SSO.
@@ -29,9 +37,9 @@ For everything else — clicking buttons, filling forms, scrolling, screenshots 
 
 When `browse auth` returns `auth_required: true`, **the agent should trigger login directly rather than instructing the user to run a terminal command**. Only the MFA taps inside the Edge window require the human; everything else can be orchestrated by the agent. Flow:
 
-1. **Check if the account email is cached.** Run `browse status --json` and look at `account_email`. If non-null, skip step 2.
+1. **Check if the account email is cached.** Run `~/.claude/skills/browse/bin/browse status --json` and look at `account_email`. If non-null, skip step 2.
 2. **Ask the user for their email** via `AskUserQuestion`. Only ever needed once per user — it gets cached at `~/.config/browse/config.toml`. Frame it: *"What's the email of the account you want to sign into? (Used to click the right tile on Microsoft's account picker — not a credential.)"*
-3. **Launch login in the background.** Shell out to `browse login <original-url> --email <email>` with `run_in_background: true`. Passing `--email` bypasses the CLI's interactive prompt, so the command is fully non-interactive from the agent's side.
+3. **Launch login in the background.** Shell out to `~/.claude/skills/browse/bin/browse login <original-url> --email <email>` with `run_in_background: true`. Passing `--email` bypasses the CLI's interactive prompt, so the command is fully non-interactive from the agent's side.
 4. **Tell the user what's about to happen.** One short line: *"An Edge window is opening. Please complete sign-in + MFA — I'll wait for it to finish, then fetch the page."*
 5. **Wait for the background task to complete.** Don't poll — the harness sends a notification when the login command exits. `browse login` exits cleanly when navigation reaches the target host (success) or the default 300s timeout fires (failure).
 6. **Retry the original `browse auth`** once login reports success.
@@ -50,7 +58,7 @@ Typical AAD persistent-cookie lifetime is ~90 days, so `browse login` usually on
 ### Fetch an authenticated page
 
 ```bash
-browse auth https://intranet.example.com/some/page --json
+~/.claude/skills/browse/bin/browse auth https://intranet.example.com/some/page --json
 ```
 
 Returns:
@@ -78,19 +86,19 @@ Default format is `both` — you get the compact accessibility snapshot (with `@
 }
 ```
 
-Tell the user to run the `login_hint` command.
+`login_hint` is a short form — prepend `~/.claude/skills/browse/bin/` when actually invoking it. Drive login yourself; don't surface the hint string to the user verbatim (see "Handling `auth_required`" above).
 
 ### Multi-step interaction (search, fill forms, click)
 
-After `browse auth` lands on the target page, the session stays open. Continue with raw `agent-browser`:
+After `browse auth` lands on the target page, the session stays open. Continue with raw `agent-browser` — the session is shared between the wrapper and direct `agent-browser` calls because the wrapper just invokes the same daemon:
 
 ```bash
-browse auth https://search.example.com/ --json                           # lands on the SPA
-agent-browser --session browse snapshot -i --json                        # refs for the search box
-agent-browser --session browse fill @e19 "your query" --json             # type query
+~/.claude/skills/browse/bin/browse auth https://search.example.com/ --json       # lands on the SPA
+agent-browser --session browse snapshot -i --json                                # refs for the search box
+agent-browser --session browse fill @e19 "your query" --json                     # type query
 agent-browser --session browse press Enter --json
 agent-browser --session browse wait --load networkidle --json
-agent-browser --session browse get text body --json                      # read results
+agent-browser --session browse get text body --json                              # read results
 ```
 
 The session is named `browse` (configurable via `BROWSE_SESSION_NAME`).
@@ -108,8 +116,8 @@ Then re-snapshot or re-extract.
 ### Cleaning up
 
 ```bash
-browse close       # close the session (Edge window disappears)
-browse status      # show config + session state
+~/.claude/skills/browse/bin/browse close       # close the session (Edge window disappears)
+~/.claude/skills/browse/bin/browse status      # show config + session state
 ```
 
 ## Failure modes
@@ -118,8 +126,9 @@ browse status      # show config + session state
 |---|---|---|
 | `auth_required: true, login_hint: "browse login <url>"` | Session rotted or first-ever visit to a new SSO realm. | Drive login yourself (see "Handling `auth_required`" section). Don't tell the user to run a terminal command unless the login attempt itself fails. |
 | `success: false, error: "net::ERR_CONNECTION_RESET"` | Network/DNS issue — often VPN required or proxy misconfigured. | Not our problem; recommend user check VPN / retry. |
-| `exceeded N picker click-throughs` | Account-picker keeps reappearing — likely wrong `BROWSE_ACCOUNT_EMAIL` or the email doesn't match any cached account. | "Check the cached email with `browse status`. Re-run `browse login <url>` if the picker shows the wrong accounts." |
+| `exceeded N picker click-throughs` | Account-picker keeps reappearing — likely wrong `BROWSE_ACCOUNT_EMAIL` or the email doesn't match any cached account. | "Check the cached email with `browse status`. Re-run `browse login <url>` (via the skill's wrapper) if the picker shows the wrong accounts." |
 | Edge window opens but stays stuck on login page during `browse login` | User got a "this device doesn't meet the requirements" screen, or MFA was cancelled. | User needs to verify device compliance in Intune Company Portal (if their org uses MDM). |
+| `error: 'uv' is not installed` from the wrapper | The skill needs `uv` to manage its local venv. | Install with `brew install uv` or the standalone installer (https://docs.astral.sh/uv/). No Python packages are installed globally. |
 
 ## Configuration reference
 
@@ -138,12 +147,13 @@ Corporate Conditional Access on managed devices checks for MDM compliance signal
 
 ## Tips for agents
 
-- **Always pass `--json`** to both `browse` and raw `agent-browser` invocations — the human-readable format is not stable.
+- **Always pass `--json`** to both the wrapper and raw `agent-browser` invocations — the human-readable format is not stable.
 - **Prefer `@eN` refs from `snapshot -i`** over text-match or CSS selectors for SPAs. On AAD screens specifically, text-match locators often hit decoy elements.
 - **`browse auth` already handles the AAD picker** — don't double-handle it. Only fall back to raw `agent-browser` clicks when you need to drive the target app.
 - **Session persists across calls.** Don't re-launch with `browse login` unless `auth_required: true` is surfaced.
-- **When `auth_required` fires, drive login yourself.** Ask for email via `AskUserQuestion` (only if not cached), launch `browse login --email <email>` in the background, wait for it to exit, retry. Do not hand the user a terminal command to run — that's the old pattern.
-- **Check `agent-browser skills get core --full`** if you need the full command reference; it ships bundled with the CLI and is always version-matched.
+- **When `auth_required` fires, drive login yourself.** Ask for email via `AskUserQuestion` (only if not cached), launch `~/.claude/skills/browse/bin/browse login <url> --email <email>` in the background, wait for it to exit, retry. Do not hand the user a terminal command to run.
+- **First invocation is slow (~1-2s extra)** while `uv` syncs the skill-local venv. Subsequent calls run at normal speed.
+- **Check `agent-browser skills get core --full`** if you need the full `agent-browser` command reference; it ships bundled with that CLI and is always version-matched.
 
 ## Known limits (v1)
 

@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute new version
+        id: version
+        run: |
+          current=$(grep '^version:' apm.yml | awk '{print $2}')
+          IFS='.' read -r major minor patch <<< "$current"
+          patch=$((patch + 1))
+          new="${major}.${minor}.${patch}"
+          echo "version=${new}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${new}" >> "$GITHUB_OUTPUT"
+
+      - name: Update apm.yml
+        run: |
+          sed -i "s/^version: .*/version: ${{ steps.version.outputs.version }}/" apm.yml
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apm.yml
+          git commit -m "chore: release ${{ steps.version.outputs.tag }} [skip ci]"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin HEAD "${{ steps.version.outputs.tag }}"
+
+      - name: Build package
+        run: |
+          cd .apm/skills && zip -r "../../skill-browse-${{ steps.version.outputs.version }}.zip" browse
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: skill-browse ${{ steps.version.outputs.version }}
+          body: |
+            ## Installation
+
+            **With apm:**
+            ```
+            apm install oscarrenalias/skill-browse#${{ steps.version.outputs.tag }}
+            ```
+
+            **Without apm:** download the zip below and extract into `~/.claude/skills/`:
+            ```
+            unzip skill-browse-${{ steps.version.outputs.version }}.zip -d ~/.claude/skills/
+            ```
+
+            No install step needed — the bundled `bin/browse` wrapper uses `uv` to
+            create a skill-local `.venv/` on first run.
+
+            Requires `agent-browser >= 0.26` and `uv` on PATH
+            (`brew install agent-browser uv` on macOS).
+          files: skill-browse-${{ steps.version.outputs.version }}.zip

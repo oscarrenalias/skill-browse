@@ -15,12 +15,15 @@ Guidance for Claude Code sessions working **on** this codebase. If you're about 
 
 ## Dev workflow
 
+The skill is designed to be self-contained. `uv` manages a skill-local `.venv/` on first invocation — no global pip installs.
+
 ```bash
-uv venv --python 3.11
-uv pip install -e '.[dev]'
-uv run pytest -q                          # < 1s, no network
+uv run --extra dev pytest -q              # < 1s, no network
 uv run browse <cmd>                       # exercise the CLI
+./bin/browse <cmd>                        # same, via the wrapper users invoke
 ```
+
+Do not commit `.venv/` — it's in `.gitignore`. Tests cover the pure-Python parts; browser flows are tested manually (see README).
 
 ## Patterns to follow
 

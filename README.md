@@ -1,102 +1,54 @@
-# browse
+# skill-browse
 
-A thin Python wrapper around [`agent-browser`](https://agent-browser.dev) for fetching authenticated intranet pages from AI agents. Targets AAD/SSO/MFA-protected sites on MDM-managed macOS devices by launching the system-installed Microsoft Edge (so Conditional Access / device-compliance checks pass) as that is usually a safe choice.
+A Claude Code skill that wraps [`agent-browser`](https://agent-browser.dev) so AI agents can reach authenticated intranet pages on MDM-managed devices — without `WebFetch` hitting a login redirect.
 
-Built to plug into [Claude Code](https://claude.com/claude-code) as a skill, but works standalone as a CLI.
+The skill launches the system-installed Microsoft Edge (so Conditional Access / device-compliance checks pass), handles AAD's "Pick an account" interstitial automatically, and exposes a small CLI (`browse login`, `browse auth`, `browse close`) that the agent orchestrates end-to-end.
+
+See [`.apm/skills/browse/SKILL.md`](.apm/skills/browse/SKILL.md) for the full agent-facing documentation and [`.apm/skills/browse/CLAUDE.md`](.apm/skills/browse/CLAUDE.md) for developer notes.
 
 Works on macOS only for now.
 
-## What it solves
+## Requirements
 
-AI agents can't reach content behind corporate SSO. `WebFetch`/`curl` see only the login redirect. `browse` gives the agent a way to:
+- `agent-browser >= 0.26` (`brew install agent-browser`)
+- `uv` (`brew install uv`) — used to manage the skill's local Python venv on first run. **No Python packages are installed globally.**
+- Microsoft Edge installed (Chrome works as a fallback; Edge is required for Intune-managed corporate SSO).
 
-1. Ask the user to sign in once, interactively, in a real managed Edge (so Intune / device compliance is satisfied).
-2. From then on, headlessly fetch authenticated pages and return them as text or as a compact accessibility snapshot with element refs for follow-up interaction.
+## Installation
 
-AAD's "Pick an account" interstitial — which reappears on every new SSO-protected subdomain — is clicked through automatically using a configured account email.
+**With apm:**
+```
+apm install oscarrenalias/skill-browse#vX.Y.Z
+```
+Replace `vX.Y.Z` with the current release tag (see the Releases tab).
 
-## Install
-
-```bash
-brew install agent-browser            # Rust CLI that does the heavy lifting
-uv venv --python 3.11
-uv pip install -e '.[dev]'
+**Without apm:** download the zip from the [latest release](https://github.com/oscarrenalias/skill-browse/releases) and extract it into your `.claude/skills/` folder:
+```
+unzip skill-browse-<version>.zip -d ~/.claude/skills/
 ```
 
-Requires:
-- macOS with Microsoft Edge installed (Chrome works as a fallback; Edge is required for Intune-managed corporate SSO).
-- `agent-browser >= 0.26`.
-- Python 3.11+.
+That's it. No install step after unzipping — the `~/.claude/skills/browse/bin/browse` wrapper uses `uv` to create a skill-local `.venv/` the first time it's invoked. Claude Code discovers the skill automatically.
 
-## First-time sign-in
+## How it's used
 
-```bash
-uv run browse login https://intranet.example.com/
+In normal use, you don't invoke the CLI yourself. Ask Claude something like *"summarize this intranet page"* or *"search our internal tool for X"* and the agent will drive the skill.
+
+If you want to pre-authenticate manually or exercise the CLI directly:
+```
+~/.claude/skills/browse/bin/browse login https://your-intranet.example.com/
+~/.claude/skills/browse/bin/browse auth https://your-intranet.example.com/some/page --json
+~/.claude/skills/browse/bin/browse status
+~/.claude/skills/browse/bin/browse close
 ```
 
-Edge opens headed. Complete MFA. The command returns when navigation reaches the requested host. On first run you're prompted once for the AAD account email used for subsequent automated picker click-throughs; it's cached at `~/.config/browse/config.toml`.
-
-## Fetch an authenticated page
-
-```bash
-uv run browse auth https://intranet.example.com/some/page --json
-```
-
-Returns JSON with `url`, `title`, `snapshot` (accessibility tree with `@eN` refs), and `text` (plain).
-
-## Multi-step interaction
-
-After `browse auth`, the session stays open. Drive it with raw `agent-browser`:
-
-```bash
-uv run browse auth https://search.example.com/
-agent-browser --session browse snapshot -i
-agent-browser --session browse fill @e19 "your query"
-agent-browser --session browse press Enter
-agent-browser --session browse wait --load networkidle
-agent-browser --session browse get text body
-```
-
-## Close
-
-```bash
-uv run browse close
-uv run browse status           # inspect config + session state
-```
-
-## Configuration
-
-Env-var or TOML driven. Precedence: CLI flag > env var > `~/.config/browse/config.toml` > defaults.
-
-| Variable | Default |
-|---|---|
-| `BROWSE_BROWSER_PATH` | `/Applications/Microsoft Edge.app/...` → Chrome fallback |
-| `BROWSE_PROFILE_DIR` | `~/.cache/browse/profile` |
-| `BROWSE_SESSION_NAME` | `browse` |
-| `BROWSE_ACCOUNT_EMAIL` | Prompted on first `browse login` |
-
-## Why system Edge specifically
-
-Corporate Conditional Access on MDM-managed devices checks for device-compliance signals (Intune MDM extension on managed Edge, OS-level SSO extension, device-enrollment certificates). A bundled/downloaded Chromium from an automation tool won't satisfy these — MFA will silently fail with a "this device doesn't meet the requirements" screen. `browse` defaults to the system-installed Edge binary; don't override `BROWSE_BROWSER_PATH` to a bundled browser unless you know your environment accepts it.
-
-## Scope
-
-**Supported**: AAD/Microsoft-tenant SSO (any tenant, not just one), public sites, cookie-based auth, any site where the user can sign in once interactively and the session persists in the browser profile.
-
-**Partial**: Non-AAD SSO (Okta, Google Workspace, Ping, custom SAML). Interactive `browse login` works and the profile remembers the session, but automatic account-picker click-through is AAD-specific. Contributions welcome — see `src/browse/authwall.py`.
-
-## Test
-
-```bash
-uv run pytest -q
-```
-
-No network — tests use captured snapshot fixtures.
+First invocation per fresh checkout takes ~1-2s extra while `uv` syncs the skill-local venv. Subsequent calls are near-instant.
 
 ## Dev
 
-See `CLAUDE.md` for the rules of the road when editing this repo.
+```
+cd .apm/skills/browse
+uv run --extra dev pytest -q         # 21 tests, < 1s, no network
+uv run browse --help                 # exercise the CLI locally
+```
 
-## License
-
-Apache-2.0. See `LICENSE`.
+See [`.apm/skills/browse/CLAUDE.md`](.apm/skills/browse/CLAUDE.md) for editing rules, non-negotiables, and how to extend it (new IdPs, new agent-browser subcommand wrappings).
